@@ -1,12 +1,10 @@
 {
   "version": 2,
+  "builds": [
+    { "src": "api/**/*.js", "use": "@vercel/node" }
+  ],
   "routes": [
     { "src": "/api/health", "dest": "/api/health.js" },
     { "src": "/api/youtube/seo", "dest": "/api/youtube/seo.js" }
-  ],
-  "functions": {
-    "api/**/*.js": {
-      "runtime": "nodejs20.x"
-    }
-  }
+  ]
 }
