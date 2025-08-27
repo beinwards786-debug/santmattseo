@@ -1,6 +1,5 @@
 // api/youtube/seo.js
 // YouTube Data API v3 → Real metadata → Polished SEO package for @santmatt
-
 const API_KEY = process.env.YT_API_KEY;
 
 /* ----------------------------- Utilities ----------------------------- */
@@ -111,8 +110,7 @@ function buildHashtags(topic) {
   if (topic === 'Dasam Dwaar') base.push('#DasamDwaar');
   if (topic === 'Gurbani Vyakhya') base.push('#Gurbani');
   base = uniq(base);
-  // keep stable at 8 items (within 7–10)
-  return ensureCount(base, 8, base);
+  return ensureCount(base, 8, base); // keep 8 (within 7–10)
 }
 
 function stubChapters(topic) {
@@ -127,7 +125,6 @@ function stubChapters(topic) {
 }
 
 function sanitizeHook(topic) {
-  // Avoid "X और X" duplication if topic already is "Naam Simran"
   if (/naam\s*simran/i.test(topic)) {
     return `Meditation in Hindi के इस @santmatt Sant Mat Satsang में: Naam Simran और Surat Shabd Yoga पर स्पष्ट, व्यावहारिक मार्गदर्शन मिलेगा — Sant Mat Teachings की रोशनी में।`;
   }
@@ -156,7 +153,6 @@ function buildDescription(topic, chaptersList) {
     '',
     'CTA: Like करें, Comment में अपने ध्यान अनुभव साझा करें, और @santmatt को Subscribe करें! आपका प्रश्न: हाल में ध्यान में आपका सबसे गहरा अनुभव क्या रहा?',
     '',
-    // Affiliate + Social (verbatim as per your spec)
     `📚 अनुशंसित पुस्तकें और साधना सामग्री
 🔹 Sant Mat & Spiritual Books
 Shabd Yoga and Sant Mat → https://fktr.in/v8xDR9w
@@ -183,7 +179,6 @@ Facebook → https://www.facebook.com/santmatthindi`,
 }
 
 function makeTitle(topic) {
-  // Prefer: “[Topic in Hindi/English] | Naam Simran Sant Mat Satsang”
   let t = `${topic} Explained | Naam Simran Sant Mat Satsang`;
   if (t.length > 70) t = `${topic} | Sant Mat Satsang`;
   return t;
@@ -206,7 +201,6 @@ export default async function handler(req, res) {
     const videoId = extractVideoId(url);
     if (!videoId) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
-    // Fetch metadata
     const apiURL = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${videoId}&key=${API_KEY}`;
     const r = await fetch(apiURL);
     if (!r.ok) {
@@ -221,13 +215,11 @@ export default async function handler(req, res) {
     const sourceTitle = sn.title || '';
     const sourceDesc = sn.description || '';
 
-    // Topic
     const topic = detectTopic(`${sourceTitle}\n${sourceDesc}`);
 
-    // Chapters → parse → sort → clamp 5–7
+    // Chapters → parse → sort → dedupe → clamp 5–7
     let chapters = parseChapters(sourceDesc).map(c => ({ ...c, seconds: secondsFromTimestamp(c.start) }));
     chapters.sort((a,b) => a.seconds - b.seconds);
-    // de-dup by start label combo
     const seen = new Set();
     chapters = chapters.filter(c => {
       const key = `${c.start}-${c.label}`;
@@ -238,15 +230,11 @@ export default async function handler(req, res) {
     if (chapters.length < 5) chapters = stubChapters(topic);
     if (chapters.length > 7) chapters = chapters.slice(0,7);
 
-    // Tags / Hashtags exact counts
-    const tags = buildTags(topic);            // exactly 25
-    const hashtags = buildHashtags(topic);    // 8 (within 7–10)
+    const tags = buildTags(topic);         // exactly 25
+    const hashtags = buildHashtags(topic); // 8 (7–10)
 
-    // Title & Description
     const title = makeTitle(topic);
     const description = buildDescription(topic, chapters);
-
-    // Playlist & End screens
     const playlist = pickPlaylist(topic);
     const endScreens = [
       { type: 'video', title: 'Watch this Satsang', url: `https://www.youtube.com/watch?v=${videoId}` },
@@ -263,7 +251,22 @@ export default async function handler(req, res) {
     };
 
     return res.status(200).json({
-      title, description, tags, hashtags, chapters, playlist, endScreens, growth,
+      title,
+      description,
+      tags,
+      hashtags,
+      chapters,
+      playlist,
+      endScreens,
+      growth,
+      debug: {
+        version: "polish-assert-1",
+        counts: {
+          tags: Array.isArray(tags) ? tags.length : -1,
+          hashtags: Array.isArray(hashtags) ? hashtags.length : -1,
+          chapters: Array.isArray(chapters) ? chapters.length : -1
+        }
+      },
       source: { videoId, sourceTitle, thumbnails: sn.thumbnails || {} }
     });
   } catch (e) {
