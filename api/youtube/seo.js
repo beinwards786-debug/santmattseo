@@ -1,9 +1,11 @@
 // api/youtube/seo.js
-// Fetch real YouTube metadata via Data API v3 and return full SEO package.
+// YouTube Data API v3 → Real metadata → Polished SEO package for @santmatt
 
 const API_KEY = process.env.YT_API_KEY;
 
-// --- helpers ---
+/* ----------------------------- Utilities ----------------------------- */
+const uniq = (arr) => Array.from(new Set(arr));
+
 function extractVideoId(input) {
   try {
     const u = new URL(input);
@@ -28,7 +30,7 @@ function parseChapters(description = '') {
     const m = line.match(ts);
     if (m) {
       const time = m[0];
-      const label = line.replace(time, '').trim() || 'Chapter';
+      const label = line.replace(time, '').replace(/[—-]\s*/g, '').trim() || 'Chapter';
       out.push({ start: time, label });
     }
   }
@@ -40,6 +42,7 @@ function secondsFromTimestamp(t) {
   if (parts.length === 2) return parts[0]*60 + parts[1];
   return 0;
 }
+
 function detectTopic(text='') {
   const lc = text.toLowerCase();
   const topics = [
@@ -53,51 +56,65 @@ function detectTopic(text='') {
   for (const t of topics) if (t.test.test(lc)) return t.key;
   return 'Naam Simran';
 }
+
 function pickPlaylist(topic) {
-  const playlists = {
-    'Meditation for Beginners': 'https://www.youtube.com/playlist?list=PLwtx0IKIzJqzH670JaGyfx3h7TvrFw6Db',
-    'Naam Simran': 'https://www.youtube.com/playlist?list=PLwtx0IKIzJqxXsRfFeez4K7m6loJ-VpFw',
-    'Sant Mat Teachings': 'https://www.youtube.com/playlist?list=PLwtx0IKIzJqw9k_4WtXEGA2nnjnpok1jX',
-    'Spiritual Awakening': 'https://www.youtube.com/playlist?list=PLwtx0IKIzJqyGq8X-K0pPI27tte-hpcOr',
-    'Bhawar Gufa': 'https://www.youtube.com/playlist?list=PLwtx0IKIzJqx0k9f1_pLTANU6JeO8Jjrq',
-    'Dasam Dwaar': 'https://www.youtube.com/playlist?list=PLwtx0IKIzJqy2TxBC4KrPRuM7H27hsfyO',
-    'Anhad Naad': 'https://www.youtube.com/playlist?list=PLwtx0IKIzJqzcV0NA26EwxrOk9dGdV-ku',
-    'Gurbani Vyakhya': 'https://www.youtube.com/playlist?list=PLwtx0IKIzJqzjsUu6-gcb4uTlfEXotrS-',
-    'Sant Mat Shorts': ''
+  const P = {
+    beginners: 'https://www.youtube.com/playlist?list=PLwtx0IKIzJqzH670JaGyfx3h7TvrFw6Db',
+    naam:      'https://www.youtube.com/playlist?list=PLwtx0IKIzJqxXsRfFeez4K7m6loJ-VpFw',
+    teachings: 'https://www.youtube.com/playlist?list=PLwtx0IKIzJqw9k_4WtXEGA2nnjnpok1jX',
+    awaken:    'https://www.youtube.com/playlist?list=PLwtx0IKIzJqyGq8X-K0pPI27tte-hpcOr',
+    bhawar:    'https://www.youtube.com/playlist?list=PLwtx0IKIzJqx0k9f1_pLTANU6JeO8Jjrq',
+    dasam:     'https://www.youtube.com/playlist?list=PLwtx0IKIzJqy2TxBC4KrPRuM7H27hsfyO',
+    anhad:     'https://www.youtube.com/playlist?list=PLwtx0IKIzJqzcV0NA26EwxrOk9dGdV-ku',
+    gurbani:   'https://www.youtube.com/playlist?list=PLwtx0IKIzJqzjsUu6-gcb4uTlfEXotrS-',
   };
-  if (topic === 'Anhad Naad') return playlists['Anhad Naad'];
-  if (topic === 'Dasam Dwaar') return playlists['Dasam Dwaar'];
-  if (topic === 'Surat Shabd Yoga') return playlists['Sant Mat Teachings'];
-  if (topic === 'Gurbani Vyakhya') return playlists['Gurbani Vyakhya'];
-  if (topic === 'Radha Soami') return playlists['Sant Mat Teachings'];
-  return playlists['Naam Simran'];
+  if (topic === 'Anhad Naad') return P.anhad;
+  if (topic === 'Dasam Dwaar') return P.dasam;
+  if (topic === 'Surat Shabd Yoga') return P.teachings;
+  if (topic === 'Gurbani Vyakhya') return P.gurbani;
+  if (topic === 'Radha Soami') return P.teachings;
+  return P.naam;
 }
+
+function ensureCount(list, target, pool=[]) {
+  const d = uniq(list);
+  if (d.length >= target) return d.slice(0, target);
+  const fill = [];
+  for (const p of pool) {
+    if (fill.length + d.length >= target) break;
+    if (!d.includes(p)) fill.push(p);
+  }
+  return d.concat(fill).slice(0, target);
+}
+
 function buildTags(topic) {
-  const core = ["Naam Simran","Sant Mat","Santmat Meditation","Surat Shabd Yoga","Anhad Naad","Dasam Dwaar Meditation","Shabd Dhun","Radha Soami","Sant Mat Satsang","Aatma Ka Safar"];
-  const med = ["Dhyan ke Anubhav","Naam Simran ke Anubhav","Meditation in Hindi","Guided Meditation Hindi","Inner Light and Sound","Simran Meditation Technique","How to Meditate in Hindi","Spiritual Awakening in Hindi"];
-  const saints = ["Kabir Das Ji","Kabir Bhajan","Sant Vaani","Nanak Sahib","Adhyatm Gyan","आत्म ज्ञान satsang","Premanand Maharaj","Gurudev Dayalu","Kaya Khoji"];
+  const core  = ["Naam Simran","Sant Mat","Santmat Meditation","Surat Shabd Yoga","Anhad Naad","Dasam Dwaar Meditation","Shabd Dhun","Radha Soami","Sant Mat Satsang","Aatma Ka Safar"];
+  const med   = ["Dhyan ke Anubhav","Naam Simran ke Anubhav","Meditation in Hindi","Guided Meditation Hindi","Inner Light and Sound","Simran Meditation Technique","How to Meditate in Hindi","Spiritual Awakening in Hindi"];
+  const saint = ["Kabir Das Ji","Kabir Bhajan","Sant Vaani","Nanak Sahib","Adhyatm Gyan","आत्म ज्ञान satsang","Premanand Maharaj","Gurudev Dayalu","Kaya Khoji"];
   const broad = ["Vipassana Sadhana","Kundalini Meditation","Bhakti Yog","Spiritual Motivation Hindi","Self Development Spirituality"];
+  const trend = ["Ruhani Satsang","Amrit Vela Satsang","Today Live Satsang Beas","Sunday Special Satsang","Trending Satsang","Bageshwar Dham"];
+
   let out = [];
   if (topic === 'Anhad Naad') out.push('Anhad Naad');
   if (topic === 'Dasam Dwaar') out.push('Dasam Dwaar Meditation');
   if (topic === 'Surat Shabd Yoga') out.push('Surat Shabd Yoga');
   if (topic === 'Gurbani Vyakhya') out.push('Gurbani Vyakhya');
-  out = out.concat(core);
-  out = out.concat(med.slice(0,6));
-  out = out.concat(['Kabir Das Ji','Sant Vaani']);
-  out = out.concat(broad.slice(0,3));
-  out.push('Ruhani Satsang');
-  const seen = new Set();
-  const dedup = out.filter(t => { if (seen.has(t)) return false; seen.add(t); return true; });
-  return dedup.slice(0,25);
+
+  out = out.concat(core, med.slice(0,6), ['Kabir Das Ji','Sant Vaani'], broad.slice(0,3), ['Ruhani Satsang']);
+  const pool = uniq(core.concat(med, saint, broad, trend));
+  return ensureCount(out, 25, pool);
 }
+
 function buildHashtags(topic) {
-  const base = ["#SantMatShorts","#NaamSimran","#SuratShabdYoga","#SantMat","#MeditationHindi","#SpiritualAwakening","#RadhaSoami","#RuhaniSatsang"];
+  let base = ["#SantMatShorts","#NaamSimran","#SuratShabdYoga","#SantMat","#MeditationHindi","#SpiritualAwakening","#RadhaSoami","#RuhaniSatsang"];
   if (topic === 'Anhad Naad') base.push('#AnhadNaad');
   if (topic === 'Dasam Dwaar') base.push('#DasamDwaar');
   if (topic === 'Gurbani Vyakhya') base.push('#Gurbani');
-  return Array.from(new Set(base)).slice(0,10);
+  base = uniq(base);
+  // keep stable at 8 items (within 7–10)
+  return ensureCount(base, 8, base);
 }
+
 function stubChapters(topic) {
   return [
     { start: '00:00', label: 'Intro & Intent' },
@@ -108,9 +125,39 @@ function stubChapters(topic) {
     { start: '13:30', label: 'Daily practice plan' }
   ];
 }
-function joinAffiliateBlock() {
-  return `
-📚 अनुशंसित पुस्तकें और साधना सामग्री
+
+function sanitizeHook(topic) {
+  // Avoid "X और X" duplication if topic already is "Naam Simran"
+  if (/naam\s*simran/i.test(topic)) {
+    return `Meditation in Hindi के इस @santmatt Sant Mat Satsang में: Naam Simran और Surat Shabd Yoga पर स्पष्ट, व्यावहारिक मार्गदर्शन मिलेगा — Sant Mat Teachings की रोशनी में।`;
+  }
+  return `Meditation in Hindi के इस @santmatt Sant Mat Satsang में: ${topic} और Naam Simran पर स्पष्ट, व्यावहारिक मार्गदर्शन मिलेगा — Sant Mat Teachings व Surat Shabd Yoga की रोशनी में।`;
+}
+
+function buildDescription(topic, chaptersList) {
+  const hook = sanitizeHook(topic);
+  const bullets = [
+    'Naam Simran का सही ढंग और साधना में निरंतरता कैसे बनायें',
+    `${topic} को समझने के संकेत और सामान्य भ्रांतियाँ`,
+    'Surat Shabd Yoga के चरण और ध्यान में बैठने की तैयारी',
+    'Inner Light & Sound के अनुभव को संभालना — अहंकार से बचें',
+    'Daily practice plan: समय, आसन, नीयत और स्व-अवलोकन'
+  ];
+  const chaptersLines = chaptersList.map(c => `${c.start} — ${c.label}`).join('\n');
+
+  return [
+    hook,
+    '',
+    'इस satsang वीडियो में आप जानेंगे:',
+    bullets.map(b => `• ${b}`).join('\n'),
+    '',
+    '⏱️ Timestamp Chapters:',
+    chaptersLines,
+    '',
+    'CTA: Like करें, Comment में अपने ध्यान अनुभव साझा करें, और @santmatt को Subscribe करें! आपका प्रश्न: हाल में ध्यान में आपका सबसे गहरा अनुभव क्या रहा?',
+    '',
+    // Affiliate + Social (verbatim as per your spec)
+    `📚 अनुशंसित पुस्तकें और साधना सामग्री
 🔹 Sant Mat & Spiritual Books
 Shabd Yoga and Sant Mat → https://fktr.in/v8xDR9w
 Sant Mat Darshan → https://fktr.in/1nIMNO6
@@ -128,37 +175,21 @@ Two Saints → https://fktr.in/gt7V15R
 📲 हमारे satsang परिवार से जुड़ें:
 WhatsApp → https://whatsapp.com/channel/0029VaNbhH359PwW1oufMf0W
 Telegram → https://t.me/santmatt
-Facebook → https://www.facebook.com/santmatthindi
-`.trim();
-}
-function buildDescription(topic, chaptersList) {
-  const hook = `Meditation in Hindi के इस @santmatt Sant Mat Satsang में: ${topic} और Naam Simran पर स्पष्ट, व्यावहारिक मार्गदर्शन मिलेगा — Sant Mat Teachings व Surat Shabd Yoga की रोशनी में।`;
-  const bullets = [
-    'Naam Simran का सही ढंग और साधना में निरंतरता कैसे बनायें',
-    `${topic} को समझने के संकेत और सामान्य भ्रांतियाँ`,
-    'Surat Shabd Yoga के चरण और ध्यान में बैठने की तैयारी',
-    'Inner Light & Sound के अनुभव को संभालना — अहंकार से बचें',
-    'Daily practice plan: समय, आसन, नीयत और स्व-अवलोकन'
-  ];
-  const chaptersLines = chaptersList.map(c => `${c.start} — ${c.label}`).join('\n');
-  return [
-    hook,
-    '',
-    'इस satsang वीडियो में आप जानेंगे:',
-    bullets.map(b => `• ${b}`).join('\n'),
-    '',
-    '⏱️ Timestamp Chapters:',
-    chaptersLines,
-    '',
-    'CTA: Like करें, Comment में अपने ध्यान अनुभव साझा करें, और @santmatt को Subscribe करें! आपका प्रश्न: हाल में ध्यान में आपका सबसे गहरा अनुभव क्या रहा?',
-    '',
-    joinAffiliateBlock(),
+Facebook → https://www.facebook.com/santmatthindi`,
     '',
     '👉 Explore more satsangs:',
     pickPlaylist(topic)
   ].join('\n');
 }
 
+function makeTitle(topic) {
+  // Prefer: “[Topic in Hindi/English] | Naam Simran Sant Mat Satsang”
+  let t = `${topic} Explained | Naam Simran Sant Mat Satsang`;
+  if (t.length > 70) t = `${topic} | Sant Mat Satsang`;
+  return t;
+}
+
+/* ------------------------------- Handler ------------------------------ */
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -175,6 +206,7 @@ export default async function handler(req, res) {
     const videoId = extractVideoId(url);
     if (!videoId) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
+    // Fetch metadata
     const apiURL = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${videoId}&key=${API_KEY}`;
     const r = await fetch(apiURL);
     if (!r.ok) {
@@ -189,24 +221,39 @@ export default async function handler(req, res) {
     const sourceTitle = sn.title || '';
     const sourceDesc = sn.description || '';
 
+    // Topic
+    const topic = detectTopic(`${sourceTitle}\n${sourceDesc}`);
+
+    // Chapters → parse → sort → clamp 5–7
     let chapters = parseChapters(sourceDesc).map(c => ({ ...c, seconds: secondsFromTimestamp(c.start) }));
-    const topic = detectTopic(sourceTitle + '\n' + sourceDesc);
+    chapters.sort((a,b) => a.seconds - b.seconds);
+    // de-dup by start label combo
+    const seen = new Set();
+    chapters = chapters.filter(c => {
+      const key = `${c.start}-${c.label}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     if (chapters.length < 5) chapters = stubChapters(topic);
+    if (chapters.length > 7) chapters = chapters.slice(0,7);
 
-    const playlist = pickPlaylist(topic);
-    const tags = buildTags(topic);
-    const hashtags = buildHashtags(topic);
+    // Tags / Hashtags exact counts
+    const tags = buildTags(topic);            // exactly 25
+    const hashtags = buildHashtags(topic);    // 8 (within 7–10)
 
-    let title = `${topic} Explained | Naam Simran Sant Mat Satsang`;
-    if (title.length > 70) title = `${topic} | Naam Simran Sant Mat Satsang`;
-
+    // Title & Description
+    const title = makeTitle(topic);
     const description = buildDescription(topic, chapters);
 
+    // Playlist & End screens
+    const playlist = pickPlaylist(topic);
     const endScreens = [
       { type: 'video', title: 'Watch this Satsang', url: `https://www.youtube.com/watch?v=${videoId}` },
       { type: 'video', title: 'Naam Simran Technique Explained', url: `https://www.youtube.com/watch?v=${videoId}` },
       { type: 'playlist', title: 'Sant Mat Teachings Playlist', url: playlist || 'https://www.youtube.com/playlist?list=PLwtx0IKIzJqw9k_4WtXEGA2nnjnpok1jX' }
     ];
+
     const growth = {
       shorts: [`${topic} का रहस्य`, 'Naam Simran कैसे करें', 'Inner Sound अनुभव', 'Daily Simran Plan'],
       externalPush: ['WhatsApp satsang group', 'Telegram channel', 'Facebook page'],
