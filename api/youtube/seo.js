@@ -101,7 +101,7 @@ function buildTags(topic) {
 
   out = out.concat(core, med.slice(0,6), ['Kabir Das Ji','Sant Vaani'], broad.slice(0,3), ['Ruhani Satsang']);
   const pool = uniq(core.concat(med, saint, broad, trend));
-  return ensureCount(out, 25, pool);
+  return ensureCount(out, 25, pool); // exactly 25
 }
 
 function buildHashtags(topic) {
@@ -110,7 +110,7 @@ function buildHashtags(topic) {
   if (topic === 'Dasam Dwaar') base.push('#DasamDwaar');
   if (topic === 'Gurbani Vyakhya') base.push('#Gurbani');
   base = uniq(base);
-  return ensureCount(base, 8, base); // keep 8 (within 7–10)
+  return ensureCount(base, 8, base); // 8 (within 7–10)
 }
 
 function stubChapters(topic) {
@@ -151,7 +151,7 @@ function buildDescription(topic, chaptersList) {
     '⏱️ Timestamp Chapters:',
     chaptersLines,
     '',
-    'CTA: Like करें, Comment में अपने ध्यान अनुभव साझा करें, और @santmatt को Subscribe करें! आपका प्रश्न: हाल में ध्यान में आपका सबसे गहरा अनुभव क्या रहा?',
+    'CTA: Like करें, Comment में अपने ध्यान अनुभव साझा करें, और @santmatt को Subscribe करें! आपका प्रश्न: हाल में ध्यान में आपका सबसे गहरा 경험 क्या रहा?',
     '',
     `📚 अनुशंसित पुस्तकें और साधना सामग्री
 🔹 Sant Mat & Spiritual Books
@@ -178,14 +178,26 @@ Facebook → https://www.facebook.com/santmatthindi`,
   ].join('\n');
 }
 
-function makeTitle(topic) {
-  let t = `${topic} Explained | Naam Simran Sant Mat Satsang`;
-  if (t.length > 70) t = `${topic} | Sant Mat Satsang`;
+// Prefer real YouTube title; keep it neat and within ~70 chars.
+function makeTitle(topic, sourceTitle = '') {
+  // use real title if present, fallback to topic
+  let main = (sourceTitle || `${topic} Explained`).trim();
+
+  // strip trailing channel/suffix after a pipe (e.g., " | Monk Stories")
+  main = main.replace(/\s*\|.*$/i, '').trim();
+
+  // compose with our suffix (soft limit 70 chars)
+  let t = `${main} | Sant Mat Satsang`;
+  if (t.length > 70) {
+    t = main;                 // drop suffix first
+    if (t.length > 70) t = t.slice(0, 70).trim(); // final trim
+  }
   return t;
 }
 
 /* ------------------------------- Handler ------------------------------ */
 export default async function handler(req, res) {
+  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -201,6 +213,7 @@ export default async function handler(req, res) {
     const videoId = extractVideoId(url);
     if (!videoId) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
+    // Fetch YouTube metadata
     const apiURL = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${videoId}&key=${API_KEY}`;
     const r = await fetch(apiURL);
     if (!r.ok) {
@@ -213,8 +226,9 @@ export default async function handler(req, res) {
     const item = data.items[0];
     const sn = item.snippet || {};
     const sourceTitle = sn.title || '';
-    const sourceDesc = sn.description || '';
+    const sourceDesc  = sn.description || '';
 
+    // Topic detection from real metadata
     const topic = detectTopic(`${sourceTitle}\n${sourceDesc}`);
 
     // Chapters → parse → sort → dedupe → clamp 5–7
@@ -230,18 +244,17 @@ export default async function handler(req, res) {
     if (chapters.length < 5) chapters = stubChapters(topic);
     if (chapters.length > 7) chapters = chapters.slice(0,7);
 
-    const tags = buildTags(topic);         // exactly 25
-    const hashtags = buildHashtags(topic); // 8 (7–10)
-
-    const title = makeTitle(topic);
+    // SEO bits
+    const tags      = buildTags(topic);         // exactly 25
+    const hashtags  = buildHashtags(topic);     // 8 (7–10 ok)
+    const title     = makeTitle(topic, sourceTitle);
     const description = buildDescription(topic, chapters);
-    const playlist = pickPlaylist(topic);
+    const playlist  = pickPlaylist(topic);
     const endScreens = [
       { type: 'video', title: 'Watch this Satsang', url: `https://www.youtube.com/watch?v=${videoId}` },
       { type: 'video', title: 'Naam Simran Technique Explained', url: `https://www.youtube.com/watch?v=${videoId}` },
       { type: 'playlist', title: 'Sant Mat Teachings Playlist', url: playlist || 'https://www.youtube.com/playlist?list=PLwtx0IKIzJqw9k_4WtXEGA2nnjnpok1jX' }
     ];
-
     const growth = {
       shorts: [`${topic} का रहस्य`, 'Naam Simran कैसे करें', 'Inner Sound अनुभव', 'Daily Simran Plan'],
       externalPush: ['WhatsApp satsang group', 'Telegram channel', 'Facebook page'],
@@ -260,7 +273,7 @@ export default async function handler(req, res) {
       endScreens,
       growth,
       debug: {
-        version: "polish-assert-1",
+        version: "title-from-youtube-v1",
         counts: {
           tags: Array.isArray(tags) ? tags.length : -1,
           hashtags: Array.isArray(hashtags) ? hashtags.length : -1,
